@@ -13,7 +13,7 @@ Hosted through the ACM using the HACLab
 - 35 minutes hands on build
 - 15 minutes for questions and mingle after
 
-### Nov 12th 5PM - 6PM on A2UI
+### Nov 92th 5PM - 6PM on A2UI
 
 - 20 minutes basic info
 - 20 minutes interactive questions
@@ -39,9 +39,29 @@ An initial version of the app will be available for them to clone. The workshop 
 
 ## Workshop planning milestones
 
-- Sept 22-28
-- Sept 29-Oct 5
-- Oct 6 - Oct 12
-- Oct 13 - Oct 19
-- Oct 20 - Oct 26
-- Oct 27 - Nov 4
+
+### Sept 22 - 28
+- Sept 28: Confirm dates and location
+
+### Sept 29 - Oct 5
+- Oct 5th: Outline for both presentations complete
+
+### Oct 6 - Oct 12
+- Oct 12: First presentation demo functionally complete 
+
+### Oct 13 - Oct 19
+
+### Oct 20 - Oct 26
+- Oct 20: First wave of comms
+- Oct 26: First presentation polished and ready
+
+### Oct 27 - Nov 4
+- Oct 29: First presentation dry run
+- Nov 2: Second wave of comms
+
+### Nov 6 - Nov 9
+- Nov 10: Second presentation polished and ready
+
+### Nov 10 - Nov 18
+- Nov 12: Second presentation dry run
+- Nov 16: Third wave of comms
