@@ -6,14 +6,14 @@ Workshop materials on agentic interfaces for AI-driven user experiences
 
 Hosted through the ACM using the HACLab
 
-### Nov 5th 5PM - 6PM on AG-UI
+### Nov 5th 5PM - 6:30PM on AG-UI
 
 - 20 minutes basic info
 - 20 minutes interactive questions
 - 35 minutes hands on build
 - 15 minutes for questions and mingle after
 
-### Nov 92th 5PM - 6PM on A2UI
+### Nov 19th 5PM - 6:30PM on A2UI
 
 - 20 minutes basic info
 - 20 minutes interactive questions
@@ -41,7 +41,7 @@ An initial version of the app will be available for them to clone. The workshop 
 
 
 ### Sept 22 - 28
-- Sept 28: Confirm dates and location
+- [x] Sept 28: Confirm dates and location
 
 ### Sept 29 - Oct 5
 - Oct 5th: Outline for both presentations complete
