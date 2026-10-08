@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Agentic Interfaces Workshop
 
 Workshop materials on agentic interfaces for AI-driven user experiences
@@ -65,3 +66,132 @@ An initial version of the app will be available for them to clone. The workshop 
 ### Nov 10 - Nov 18
 - Nov 12: Second presentation dry run
 - Nov 16: Third wave of comms
+=======
+# AG-UI + A2UI Study Planner Demo
+
+A presentation-friendly student study planner that demonstrates:
+
+- an **AG-UI 1.0** POST + Server-Sent Events endpoint using the official Python `ag-ui-protocol` package;
+- a custom **A2UI catalog** supplied to the planning agent;
+- A2UI operations streamed from the agent to the frontend inside AG-UI `CUSTOM` events;
+- a React renderer for the schedule catalog;
+- a live right-side event inspector that displays each AG-UI event as it arrives;
+- a "Demonstrate classic 16" control for the requested older/core event catalogue.
+
+> The current AG-UI protocol contains more event families than the classic 16. This project intentionally highlights the requested set for teaching/demo purposes.
+
+## Architecture
+
+```text
+Student input
+    |
+    v
+React/Vite frontend
+    |  POST RunAgentInput
+    v
+FastAPI /agent
+    |  AG-UI RUN_STARTED / STATE / STEP / TOOL events
+    |  OpenAI call using OPENAPI_KEY
+    |  Agent sees custom A2UI catalog
+    |  Agent returns A2UI operations
+    |  AG-UI CUSTOM(name="a2ui") carries each operation
+    v
+SSE stream --------------------------------------+
+    |                                             |
+    +--> Event inspector (raw JSON, arrival order)|
+    |                                             |
+    +--> Chat renderer (TEXT_MESSAGE_*)            |
+    |                                             |
+    +--> A2UI renderer (CUSTOM a2ui payloads) <----+
+```
+
+## Requested classic 16 events
+
+The UI tracks:
+
+1. `RUN_STARTED`
+2. `RUN_FINISHED`
+3. `RUN_ERROR`
+4. `STEP_STARTED`
+5. `STEP_FINISHED`
+6. `TEXT_MESSAGE_START`
+7. `TEXT_MESSAGE_CONTENT`
+8. `TEXT_MESSAGE_END`
+9. `TOOL_CALL_START`
+10. `TOOL_CALL_ARGS`
+11. `TOOL_CALL_END`
+12. `TOOL_CALL_RESULT`
+13. `STATE_SNAPSHOT`
+14. `STATE_DELTA`
+15. `MESSAGES_SNAPSHOT`
+16. `CUSTOM`
+
+The “Demonstrate classic 16” button performs two deterministic demo runs: one ends with `RUN_FINISHED`, the other with `RUN_ERROR`. This shows both terminal event types without violating the one-terminal-per-run lifecycle.
+
+## Run it
+
+### 1. Backend
+
+Python 3.11+ is recommended.
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\\Scripts\\activate
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+Edit `backend/.env`:
+
+```env
+OPENAPI_KEY=your_real_key_here
+OPENAI_MODEL=gpt-4o-mini
+FRONTEND_ORIGIN=http://localhost:5173
+```
+
+Then start FastAPI:
+
+```bash
+uvicorn main:app --reload --port 8000
+```
+
+Health check: `http://localhost:8000/health`
+
+### 2. Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`.
+
+## How A2UI is used
+
+`shared/study-planner-catalog.json` is the contract given to the agent. The model may use only these components:
+
+- `WeekSchedule`
+- `DayColumn`
+- `StudyBlock`
+- `DeadlineBadge`
+- `ScheduleSummary`
+- `WarningBanner`
+
+The agent returns A2UI v0.9-style `createSurface` and `updateComponents` operations. Components use flat IDs and child references rather than an executable/nested UI tree. The frontend receives each A2UI operation over the AG-UI stream and routes it to the catalog renderer.
+
+## Files to show during a presentation
+
+- `backend/main.py` — AG-UI endpoint and event emission
+- `shared/study-planner-catalog.json` — catalog supplied to the agent
+- `frontend/src/agui.ts` — raw SSE event intake
+- `frontend/src/a2ui.tsx` — declarative catalog renderer
+- `frontend/src/App.tsx` — event panel and integration
+
+## Notes
+
+- The environment variable is intentionally named `OPENAPI_KEY` because that was the requested name, even though OpenAI examples commonly use `OPENAI_API_KEY`.
+- The event inspector stores raw decoded event JSON in exactly the order received by the browser.
+- The frontend parses SSE directly instead of hiding transport details behind a chat component. This is intentional: it makes the event flow visible for demonstration.
+>>>>>>> 31aa8ed (initial)
