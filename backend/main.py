@@ -175,7 +175,6 @@ def call_planner(student_input: str) -> dict[str, Any]:
             {"role": "user", "content": planner_prompt(student_input)},
         ],
         response_format={"type": "json_object"},
-        temperature=0.2,
     )
     content = response.choices[0].message.content or "{}"
     data = json.loads(content)
