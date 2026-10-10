@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from openai import OpenAI
+from openai import AzureOpenAI, OpenAI
 
 from ag_ui.core import (
     CustomEvent,
@@ -51,15 +51,49 @@ app.add_middleware(
 )
 
 
+def using_azure_openai() -> bool:
+    return (
+        os.getenv("AZURE_OPENAI_ENDPOINT") is not None
+        or os.getenv("AZURE_OPENAI_API_KEY") is not None
+        or os.getenv("OPENAI_API_TYPE") == "azure"
+    )
+
+
 def get_client() -> OpenAI:
-    key = os.getenv("OPENAPI_KEY")
+    if using_azure_openai():
+        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+        if not endpoint:
+            raise RuntimeError("AZURE_OPENAI_ENDPOINT is not set.")
+
+        key = os.getenv("AZURE_OPENAI_API_KEY")
+        if not key:
+            raise RuntimeError("AZURE_OPENAI_API_KEY is not set.")
+
+        api_version = os.getenv("OPENAI_API_VERSION")
+        if not api_version:
+            raise RuntimeError("OPENAI_API_VERSION is not set for Azure OpenAI.")
+
+        return AzureOpenAI(
+            azure_endpoint=endpoint,
+            api_key=key,
+            api_version=api_version,
+        )
+
+    key = os.getenv("OPENAPI_KEY") or os.getenv("OPENAI_API_KEY")
     if not key:
-        raise RuntimeError("OPENAPI_KEY is not set. Copy backend/.env.example to backend/.env and add your key.")
+        raise RuntimeError(
+            "OPENAPI_KEY (or OPENAI_API_KEY) is not set. Copy backend/.env.example to backend/.env and add your key."
+        )
     return OpenAI(api_key=key)
 
 
 def model_name() -> str:
-    return os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    if using_azure_openai():
+        deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+        if deployment:
+            return deployment
+
+    return os.getenv("OPENAI_MODEL", "gpt-latest")
 
 
 def camel_event_dict(event: Any) -> dict[str, Any]:
@@ -156,7 +190,12 @@ def health() -> dict[str, Any]:
         "ok": True,
         "catalogId": CATALOG_ID,
         "model": model_name(),
-        "apiKeyConfigured": bool(os.getenv("OPENAPI_KEY")),
+        "provider": "azure" if using_azure_openai() else "openai",
+        "apiKeyConfigured": bool(
+            os.getenv("OPENAPI_KEY")
+            or os.getenv("OPENAI_API_KEY")
+            or os.getenv("AZURE_OPENAI_API_KEY")
+        ),
     }
 
 

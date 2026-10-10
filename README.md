@@ -91,7 +91,7 @@ React/Vite frontend
     v
 FastAPI /agent
     |  AG-UI RUN_STARTED / STATE / STEP / TOOL events
-    |  OpenAI call using OPENAPI_KEY
+    |  OpenAI or Azure OpenAI call from env config
     |  Agent sees custom A2UI catalog
     |  Agent returns A2UI operations
     |  AG-UI CUSTOM(name="a2ui") carries each operation
@@ -147,6 +147,16 @@ Edit `backend/.env`:
 ```env
 OPENAPI_KEY=your_real_key_here
 OPENAI_MODEL=gpt-4o-mini
+FRONTEND_ORIGIN=http://localhost:5173
+```
+
+Azure OpenAI is also supported. If you want to use the Azure endpoint you shared, set:
+
+```env
+AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
+AZURE_OPENAI_API_KEY=your_azure_openai_key_here
+OPENAI_API_VERSION=2024-10-21
+AZURE_OPENAI_DEPLOYMENT=your-deployment-name
 FRONTEND_ORIGIN=http://localhost:5173
 ```
 
