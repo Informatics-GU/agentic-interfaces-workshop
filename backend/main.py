@@ -111,6 +111,39 @@ def extract_user_text(input_data: RunAgentInput) -> str:
     return "\n\n".join(parts).strip()
 
 
+def tool_call_events(
+    encoder: EventEncoder,
+    tool_call_id: str,
+    message_id: str,
+    tool_name: str,
+    arguments: str,
+    result_message_id: str,
+    result: str,
+):
+    yield encoder.encode(ToolCallStartEvent(
+        type=EventType.TOOL_CALL_START,
+        tool_call_id=tool_call_id,
+        tool_call_name=tool_name,
+        parent_message_id=message_id,
+    ))
+    yield encoder.encode(ToolCallArgsEvent(
+        type=EventType.TOOL_CALL_ARGS,
+        tool_call_id=tool_call_id,
+        delta=arguments,
+    ))
+    yield encoder.encode(ToolCallEndEvent(
+        type=EventType.TOOL_CALL_END,
+        tool_call_id=tool_call_id,
+    ))
+    yield encoder.encode(ToolCallResultEvent(
+        type=EventType.TOOL_CALL_RESULT,
+        message_id=result_message_id,
+        tool_call_id=tool_call_id,
+        content=result,
+        role="tool",
+    ))
+
+
 def planner_prompt(student_input: str) -> str:
     catalog_text = json.dumps(CATALOG, indent=2)
     return f"""
@@ -237,35 +270,21 @@ async def agent_endpoint(input_data: RunAgentInput, request: Request) -> Streami
                 step_name="build-week-plan",
             ))
 
-            yield encoder.encode(ToolCallStartEvent(
-                type=EventType.TOOL_CALL_START,
-                tool_call_id=tool_call_id,
-                tool_call_name="generate_a2ui_week_schedule",
-                parent_message_id=message_id,
-            ))
             tool_args = json.dumps({
                 "studentInput": student_input,
                 "catalogId": CATALOG_ID,
             })
-            yield encoder.encode(ToolCallArgsEvent(
-                type=EventType.TOOL_CALL_ARGS,
-                tool_call_id=tool_call_id,
-                delta=tool_args,
-            ))
-            yield encoder.encode(ToolCallEndEvent(
-                type=EventType.TOOL_CALL_END,
-                tool_call_id=tool_call_id,
-            ))
-
             result = call_planner(student_input)
-
-            yield encoder.encode(ToolCallResultEvent(
-                type=EventType.TOOL_CALL_RESULT,
-                message_id=str(uuid.uuid4()),
-                tool_call_id=tool_call_id,
-                content=json.dumps({"status": "ok", "a2uiMessages": len(result["a2ui"])}),
-                role="tool",
-            ))
+            for event in tool_call_events(
+                encoder,
+                tool_call_id,
+                message_id,
+                "generate_a2ui_week_schedule",
+                tool_args,
+                str(uuid.uuid4()),
+                json.dumps({"status": "ok", "a2uiMessages": len(result["a2ui"])}),
+            ):
+                yield event
 
             # A2UI is transported inside AG-UI custom events. The frontend routes these
             # payloads into its declarative A2UI renderer and also displays the raw event.
@@ -343,10 +362,16 @@ async def demo_events(input_data: RunAgentInput, request: Request, terminal: str
         yield encoder.encode(MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=input_data.messages))
         yield encoder.encode(StateSnapshotEvent(type=EventType.STATE_SNAPSHOT, snapshot={"demo": True, "count": 0}))
         yield encoder.encode(StepStartedEvent(type=EventType.STEP_STARTED, step_name="event-demo"))
-        yield encoder.encode(ToolCallStartEvent(type=EventType.TOOL_CALL_START, tool_call_id=tool_id, tool_call_name="demo_tool", parent_message_id=msg_id))
-        yield encoder.encode(ToolCallArgsEvent(type=EventType.TOOL_CALL_ARGS, tool_call_id=tool_id, delta='{"example":true}'))
-        yield encoder.encode(ToolCallEndEvent(type=EventType.TOOL_CALL_END, tool_call_id=tool_id))
-        yield encoder.encode(ToolCallResultEvent(type=EventType.TOOL_CALL_RESULT, message_id=str(uuid.uuid4()), tool_call_id=tool_id, content='{"ok":true}', role="tool"))
+        for event in tool_call_events(
+            encoder,
+            tool_id,
+            msg_id,
+            "demo_tool",
+            '{"example":true}',
+            str(uuid.uuid4()),
+            '{"ok":true}',
+        ):
+            yield event
         yield encoder.encode(CustomEvent(type=EventType.CUSTOM, name="demo.custom", value={"purpose": "Shows CUSTOM payloads"}))
         yield encoder.encode(StateDeltaEvent(type=EventType.STATE_DELTA, delta=[{"op": "replace", "path": "/count", "value": 1}]))
         yield encoder.encode(StepFinishedEvent(type=EventType.STEP_FINISHED, step_name="event-demo"))

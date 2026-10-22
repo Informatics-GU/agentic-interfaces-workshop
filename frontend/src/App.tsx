@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { A2UIRenderer } from './a2ui';
 import { streamAgUi } from './agui';
 import type { A2UIComponent, A2UIOperation, AgEvent, ChatMessage } from './types';
@@ -19,68 +19,70 @@ export function App() {
   const [components, setComponents] = useState<Record<string, A2UIComponent>>({});
   const [busy, setBusy] = useState(false);
 
-  const seen = useMemo(() => new Set(events.map((e) => e.type)), [events]);
+  const seen = new Set(events.map((event) => event.type));
 
   function consume(event: AgEvent) {
     setEvents((prev) => [...prev, event]);
 
-    if (event.type === 'TEXT_MESSAGE_START') {
-      setChat((prev) => [...prev, { role: 'assistant', content: '' }]);
-    }
-    if (event.type === 'TEXT_MESSAGE_CONTENT') {
-      const delta = String(event.delta ?? '');
-      setChat((prev) => {
-        const copy = [...prev];
-        for (let i = copy.length - 1; i >= 0; i--) {
-          if (copy[i].role === 'assistant') {
-            copy[i] = { ...copy[i], content: copy[i].content + delta };
-            break;
+    switch (event.type) {
+      case 'TEXT_MESSAGE_START':
+        setChat((prev) => [...prev, { role: 'assistant', content: '' }]);
+        break;
+      case 'TEXT_MESSAGE_CONTENT':
+        setChat((prev) => {
+          const copy = [...prev];
+          for (let i = copy.length - 1; i >= 0; i--) {
+            if (copy[i].role === 'assistant') {
+              copy[i] = { ...copy[i], content: copy[i].content + String(event.delta ?? '') };
+              break;
+            }
           }
-        }
-        return copy;
-      });
-    }
-
-    if (event.type === 'CUSTOM' && event.name === 'a2ui') {
-      const op = event.value as A2UIOperation;
-      if (op.updateComponents?.components) {
-        setComponents((prev) => {
-          const next = { ...prev };
-          for (const component of op.updateComponents!.components) next[component.id] = component;
-          return next;
+          return copy;
         });
-      }
+        break;
+      case 'CUSTOM':
+        if (event.name === 'a2ui') {
+          const updates = (event.value as A2UIOperation).updateComponents?.components;
+          if (updates) setComponents((prev) => ({
+            ...prev,
+            ...Object.fromEntries(updates.map((component) => [component.id, component])),
+          }));
+        }
+        break;
+    }
+  }
+
+  async function runStream(
+    path: string,
+    message = input,
+    resetComponents = false,
+    resetEvents = true,
+  ) {
+    setBusy(true);
+    if (resetEvents) setEvents([]);
+    if (resetComponents) {
+      setComponents({});
+      setChat([{ role: 'user', content: message }]);
+    }
+    try {
+      await streamAgUi(path, [{ id: crypto.randomUUID(), role: 'user', content: message }], consume);
+    } catch (error) {
+      consume({ type: 'CLIENT_ERROR', message: String(error) });
+    } finally {
+      setBusy(false);
     }
   }
 
   async function buildSchedule() {
     if (!input.trim() || busy) return;
-    setBusy(true);
-    setEvents([]);
-    setComponents({});
-    setChat([{ role: 'user', content: input }]);
-    try {
-      await streamAgUi('/agent', [{ id: crypto.randomUUID(), role: 'user', content: input }], consume);
-    } catch (error) {
-      consume({ type: 'CLIENT_ERROR', message: String(error) });
-    } finally {
-      setBusy(false);
-    }
+    await runStream('/agent', input, true);
   }
 
   async function demoEvents() {
     if (busy) return;
-    setBusy(true);
-    setEvents([]);
-    try {
-      const demoMessage = [{ id: crypto.randomUUID(), role: 'user' as const, content: 'Demonstrate the classic event catalogue.' }];
-      await streamAgUi('/demo-events?terminal=finished', demoMessage, consume);
-      await streamAgUi('/demo-events?terminal=error', demoMessage, consume);
-    } catch (error) {
-      consume({ type: 'CLIENT_ERROR', message: String(error) });
-    } finally {
-      setBusy(false);
-    }
+    const message = 'Demonstrate the classic event catalogue.';
+    await runStream('/demo-events?terminal=finished', message);
+    await runStream('/demo-events?terminal=error', message, false, false);
   }
 
   return (
