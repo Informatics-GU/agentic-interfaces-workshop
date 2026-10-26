@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Agentic Interfaces Workshop
 
 Workshop materials on agentic interfaces for AI-driven user experiences
@@ -66,7 +65,7 @@ An initial version of the app will be available for them to clone. The workshop 
 ### Nov 10 - Nov 18
 - Nov 12: Second presentation dry run
 - Nov 16: Third wave of comms
-=======
+
 # AG-UI + A2UI Study Planner Demo
 
 A presentation-friendly student study planner that demonstrates:
@@ -204,4 +203,3 @@ The agent returns A2UI v0.9-style `createSurface` and `updateComponents` operati
 - The environment variable is intentionally named `OPENAPI_KEY` because that was the requested name, even though OpenAI examples commonly use `OPENAI_API_KEY`.
 - The event inspector stores raw decoded event JSON in exactly the order received by the browser.
 - The frontend parses SSE directly instead of hiding transport details behind a chat component. This is intentional: it makes the event flow visible for demonstration.
->>>>>>> 31aa8ed (initial)
