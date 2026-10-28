@@ -274,20 +274,14 @@ async def agent_endpoint(input_data: RunAgentInput, request: Request) -> Streami
 
             for i in range(0, len(result), 160):
                 yield encoder.encode(TextMessageContentEvent(
-                    type=EventType.TEXT_MESSAGE_CONTENT,
-                    message_id=message_id,
-                    delta=result[i:i + 160],
+                    #Missing event information
                 ))
             yield encoder.encode(TextMessageEndEvent(
                 type=EventType.TEXT_MESSAGE_END,
                 message_id=message_id,
             ))
 
-            yield encoder.encode(RunFinishedEvent(
-                type=EventType.RUN_FINISHED,
-                thread_id=input_data.thread_id,
-                run_id=input_data.run_id,
-            ))
+            #missing finished event
 
         except Exception as exc:
             yield encoder.encode(RunErrorEvent(
