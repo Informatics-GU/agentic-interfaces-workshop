@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { A2UIRenderer } from './a2ui';
 import { streamAgUi } from './agui';
-import type { A2UIComponent, A2UIOperation, AgEvent, ChatMessage } from './types';
+import type { AgEvent, ChatMessage } from './types';
 
 const CLASSIC_16 = [
   'RUN_STARTED', 'RUN_FINISHED', 'RUN_ERROR', 'STEP_STARTED', 'STEP_FINISHED',
@@ -16,7 +15,6 @@ export function App() {
   const [input, setInput] = useState(EXAMPLE);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [events, setEvents] = useState<AgEvent[]>([]);
-  const [components, setComponents] = useState<Record<string, A2UIComponent>>({});
   const [busy, setBusy] = useState(false);
 
   const seen = new Set(events.map((event) => event.type));
@@ -40,28 +38,19 @@ export function App() {
           return copy;
         });
         break;
-      case 'CUSTOM':
-        if (event.name === 'a2ui') {
-          const updates = (event.value as A2UIOperation).updateComponents?.components;
-          if (updates) setComponents((prev) => ({
-            ...prev,
-            ...Object.fromEntries(updates.map((component) => [component.id, component])),
-          }));
-        }
-        break;
+
     }
   }
 
   async function runStream(
     path: string,
     message = input,
-    resetComponents = false,
+    resetChat = false,
     resetEvents = true,
   ) {
     setBusy(true);
     if (resetEvents) setEvents([]);
-    if (resetComponents) {
-      setComponents({});
+    if (resetChat) {
       setChat([{ role: 'user', content: message }]);
     }
     try {
@@ -89,7 +78,7 @@ export function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">AG-UI 1.0 transport · A2UI declarative schedule</p>
+          <p className="eyebrow">AG-UI 1.0 transport · Text study planner</p>
           <h1>Study Planner Agent</h1>
         </div>
         <button className="secondary" onClick={demoEvents} disabled={busy}>Demonstrate classic 16</button>
@@ -119,10 +108,6 @@ export function App() {
             </div>
           </section>
 
-          <section className="panel schedule-panel">
-            <div className="panel-title"><h2>A2UI surface</h2><span>custom catalog renderer</span></div>
-            <A2UIRenderer components={components} />
-          </section>
         </div>
 
         <aside className="panel event-panel">

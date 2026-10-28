@@ -20,14 +20,24 @@ export async function streamAgUi(
     forwardedProps: {},
   };
 
-  const response = await fetch(`${API}${path}`, {
+  const endpoint = `${API.replace(/\/$/, '')}${path}`;
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
     },
     body: JSON.stringify(body),
-  });
+    });
+  } catch {
+    throw new Error(
+      `Could not connect to ${endpoint}. Start both services with npm run dev from the repository root. ` +
+      'Check that frontend/.env VITE_API_BASE_URL matches the backend address (default http://localhost:8000), ' +
+      'then restart the frontend after changing it. If the backend is running, check its FRONTEND_ORIGIN setting matches the browser origin.',
+    );
+  }
 
   if (!response.ok) {
     const errorText = await response.text();

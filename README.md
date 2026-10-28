@@ -129,6 +129,17 @@ The “Demonstrate classic 16” button performs two deterministic demo runs: on
 
 ## Run it
 
+After completing the backend and frontend setup below, start both services from
+the repository root with:
+
+```bash
+npm run dev
+```
+
+`npm start` also works. The launcher uses `backend/.venv` or the root `.venv`
+when present, otherwise Python from your PATH. Open `http://localhost:5173`;
+the backend runs at `http://localhost:8000`. Press Ctrl+C to stop both services.
+
 ### 1. Backend
 
 Python 3.11+ is recommended.

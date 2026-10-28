@@ -3,13 +3,12 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from pathlib import Path
 from typing import Any, AsyncGenerator
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from openai import AzureOpenAI, OpenAI
 
 from ag_ui.core import (
@@ -36,12 +35,7 @@ from ag_ui.encoder import EventEncoder
 
 load_dotenv()
 
-ROOT = Path(__file__).resolve().parents[1]
-CATALOG_PATH = ROOT / "shared" / "study-planner-catalog.json"
-CATALOG = json.loads(CATALOG_PATH.read_text())
-CATALOG_ID = CATALOG["catalogId"]
-
-app = FastAPI(title="AG-UI + A2UI Study Planner", version="1.0.0")
+app = FastAPI(title="AG-UI Study Planner", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")],
@@ -145,82 +139,62 @@ def tool_call_events(
 
 
 def planner_prompt(student_input: str) -> str:
-    catalog_text = json.dumps(CATALOG, indent=2)
     return f"""
-You are a university study-planning agent that emits A2UI v0.9-style declarative UI.
+You are a university study-planning agent.
 
-The user gives you:
-- a rough week schedule / availability,
-- assignments,
-- due dates,
-- estimated completion times.
+The user gives you a rough week schedule / availability, classes, assignments,
+due dates, and estimated completion times.
 
-Build a realistic seven-day plan. Split long assignments when useful. Never schedule work after its due date. Preserve fixed classes/work/sleep constraints. Leave reasonable transition/break time and do not invent impossible availability.
+Return the complete plan as plain text with short section headings, blank lines,
+and simple bullets. Do not return JSON, HTML, UI components, or code fences.
 
-You MUST use only components in this A2UI catalog:
-{catalog_text}
+Include these sections:
+Classes and fixed commitments:
+- List every supplied class and other fixed commitment with its days and times.
+  Preserve unnamed classes as unnamed; do not invent course names.
+Assignments:
+- List every supplied homework assignment with its course (if supplied), deadline,
+  and estimated completion time. Explicitly flag missing details.
+Weekly plan:
+- Include Monday through Sunday, even when no study is scheduled.
+- Show readable local start/end times, assignment names, and duration for each
+  homework block, fitting homework around the existing schedule.
+Plan summary:
+- Briefly explain prioritization and give the total scheduled study time.
+- Identify any unfinished work, insufficient availability, missing information,
+  or assumptions. Ask specific questions when needed.
 
-Return ONLY valid JSON with this exact top-level shape:
-{{
-  "assistantMessage": "brief explanation of the schedule strategy",
-  "a2ui": [
-    {{
-      "version": "v0.9",
-      "createSurface": {{
-        "surfaceId": "week-schedule",
-        "catalogId": "{CATALOG_ID}"
-      }}
-    }},
-    {{
-      "version": "v0.9",
-      "updateComponents": {{
-        "surfaceId": "week-schedule",
-        "components": [
-          {{"id":"root","component":"WeekSchedule","title":"...","subtitle":"...","children":["summary","monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]}}
-        ]
-      }}
-    }}
-  ]
-}}
-
-Rules for components:
-- Include exactly one WeekSchedule root with id "root".
-- Include exactly one ScheduleSummary with id "summary".
-- Include one DayColumn for each Monday-Sunday, even if empty.
-- DayColumn children reference StudyBlock and optional DeadlineBadge ids.
-- Every referenced child id must exist in the same components array.
-- StudyBlock start/end should be readable local times such as "3:00 PM".
-- StudyBlock minutes must agree with start/end as closely as practical.
-- Use WarningBanner only when the workload cannot fit or inputs are materially incomplete.
-- Do not use HTML or executable code.
+Build a realistic seven-day plan. Split long assignments when useful. Never
+schedule work after its due date or overlap fixed classes/work/sleep constraints.
+Respect study preferences and leave reasonable transition/break time. Do not
+invent availability or silently drop assignments. When work cannot fit before a
+deadline, state how much remains unscheduled instead of forcing it into the plan.
+If dates or availability are ambiguous, state assumptions or ask for clarification.
 
 Student input:
 {student_input}
 """.strip()
 
 
-def call_planner(student_input: str) -> dict[str, Any]:
+def call_planner(student_input: str) -> str:
     client = get_client()
     response = client.chat.completions.create(
         model=model_name(),
         messages=[
-            {"role": "system", "content": "Return strict JSON only. You are generating a safe declarative A2UI surface from the supplied catalog."},
+            {"role": "system", "content": "You are a study-planning agent. Return a complete, readable text plan using headings and simple bullets."},
             {"role": "user", "content": planner_prompt(student_input)},
         ],
-        response_format={"type": "json_object"},
     )
-    content = response.choices[0].message.content or "{}"
-    data = json.loads(content)
-    if not isinstance(data.get("a2ui"), list):
-        raise ValueError("Model response did not contain an a2ui array")
-    return data
+    content = response.choices[0].message.content
+    if not content or not content.strip():
+        raise ValueError("Model response did not contain a text plan")
+    return content
 
 
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {
         "ok": True,
-        "catalogId": CATALOG_ID,
         "model": model_name(),
         "provider": "azure" if using_azure_openai() else "openai",
         "apiKeyConfigured": bool(
@@ -229,11 +203,6 @@ def health() -> dict[str, Any]:
             or os.getenv("AZURE_OPENAI_API_KEY")
         ),
     }
-
-
-@app.get("/catalog")
-def catalog() -> JSONResponse:
-    return JSONResponse(CATALOG)
 
 
 @app.post("/agent")
@@ -260,7 +229,6 @@ async def agent_endpoint(input_data: RunAgentInput, request: Request) -> Streami
                 type=EventType.STATE_SNAPSHOT,
                 snapshot={
                     "phase": "planning",
-                    "catalogId": CATALOG_ID,
                     "scheduleReady": False,
                 },
             ))
@@ -272,28 +240,18 @@ async def agent_endpoint(input_data: RunAgentInput, request: Request) -> Streami
 
             tool_args = json.dumps({
                 "studentInput": student_input,
-                "catalogId": CATALOG_ID,
             })
             result = call_planner(student_input)
             for event in tool_call_events(
                 encoder,
                 tool_call_id,
                 message_id,
-                "generate_a2ui_week_schedule",
+                "generate_week_schedule",
                 tool_args,
                 str(uuid.uuid4()),
-                json.dumps({"status": "ok", "a2uiMessages": len(result["a2ui"])}),
+                json.dumps({"status": "ok"}),
             ):
                 yield event
-
-            # A2UI is transported inside AG-UI custom events. The frontend routes these
-            # payloads into its declarative A2UI renderer and also displays the raw event.
-            for operation in result["a2ui"]:
-                yield encoder.encode(CustomEvent(
-                    type=EventType.CUSTOM,
-                    name="a2ui",
-                    value=operation,
-                ))
 
             yield encoder.encode(StateDeltaEvent(
                 type=EventType.STATE_DELTA,
@@ -313,17 +271,13 @@ async def agent_endpoint(input_data: RunAgentInput, request: Request) -> Streami
                 message_id=message_id,
                 role="assistant",
             ))
-            text = result.get("assistantMessage", "I built the week schedule from your availability and deadlines.")
-            # Split text into a few chunks so the event panel visibly demonstrates streaming.
-            words = text.split()
-            for i in range(0, len(words), 7):
-                delta = " ".join(words[i:i + 7]) + (" " if i + 7 < len(words) else "")
-                if delta:
-                    yield encoder.encode(TextMessageContentEvent(
-                        type=EventType.TEXT_MESSAGE_CONTENT,
-                        message_id=message_id,
-                        delta=delta,
-                    ))
+
+            for i in range(0, len(result), 160):
+                yield encoder.encode(TextMessageContentEvent(
+                    type=EventType.TEXT_MESSAGE_CONTENT,
+                    message_id=message_id,
+                    delta=result[i:i + 160],
+                ))
             yield encoder.encode(TextMessageEndEvent(
                 type=EventType.TEXT_MESSAGE_END,
                 message_id=message_id,
