@@ -253,13 +253,7 @@ async def agent_endpoint(input_data: RunAgentInput, request: Request) -> Streami
             ):
                 yield event
 
-            yield encoder.encode(StateDeltaEvent(
-                type=EventType.STATE_DELTA,
-                delta=[
-                    {"op": "replace", "path": "/phase", "value": "complete"},
-                    {"op": "replace", "path": "/scheduleReady", "value": True},
-                ],
-            ))
+            #event missing stateDelta
 
             yield encoder.encode(StepFinishedEvent(
                 type=EventType.STEP_FINISHED,
