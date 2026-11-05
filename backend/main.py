@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Iterator
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -176,19 +176,27 @@ Student input:
 """.strip()
 
 
-def call_planner(student_input: str) -> str:
-    client = get_client()
-    response = client.chat.completions.create(
-        model=model_name(),
-        messages=[
-            {"role": "system", "content": "You are a study-planning agent. Return a complete, readable text plan using headings and simple bullets."},
-            {"role": "user", "content": planner_prompt(student_input)},
-        ],
-    )
-    content = response.choices[0].message.content
-    if not content or not content.strip():
-        raise ValueError("Model response did not contain a text plan")
-    return content
+def call_planner(student_input: str) -> Iterator[str]:
+    """Yield text as the model generates it, without buffering the full plan."""
+    with get_client() as client:
+        with client.chat.completions.create(
+            model=model_name(),
+            messages=[
+                {"role": "system", "content": "You are a study-planning agent. Return a complete, readable text plan using headings and simple bullets."},
+                {"role": "user", "content": planner_prompt(student_input)},
+            ],
+            stream=True,
+        ) as response:
+            has_text = False
+            for chunk in response:
+                if not chunk.choices:
+                    continue
+                content = chunk.choices[0].delta.content
+                if content:
+                    has_text = has_text or bool(content.strip())
+                    yield content
+            if not has_text:
+                raise ValueError("Model response did not contain a text plan")
 
 
 @app.get("/health")
@@ -210,7 +218,7 @@ async def agent_endpoint(input_data: RunAgentInput, request: Request) -> Streami
     encoder = EventEncoder(accept=request.headers.get("accept"))
     student_input = extract_user_text(input_data)
 
-    async def events() -> AsyncGenerator[str, None]:
+    def events() -> Iterator[str]:
         message_id = str(uuid.uuid4())
         tool_call_id = str(uuid.uuid4())
         try:
@@ -241,7 +249,23 @@ async def agent_endpoint(input_data: RunAgentInput, request: Request) -> Streami
             tool_args = json.dumps({
                 "studentInput": student_input,
             })
-            result = call_planner(student_input)
+            yield encoder.encode(TextMessageStartEvent(
+                type=EventType.TEXT_MESSAGE_START,
+                message_id=message_id,
+                role="assistant",
+            ))
+
+            # Keep result/i compatible with the existing student event exercise.
+            for result in call_planner(student_input):
+                for i in range(0, len(result), 160):
+                    yield encoder.encode(TextMessageContentEvent(
+                        #Missing event information
+                    ))
+            yield encoder.encode(TextMessageEndEvent(
+                type=EventType.TEXT_MESSAGE_END,
+                message_id=message_id,
+            ))
+
             for event in tool_call_events(
                 encoder,
                 tool_call_id,
@@ -260,21 +284,6 @@ async def agent_endpoint(input_data: RunAgentInput, request: Request) -> Streami
                 step_name="build-week-plan",
             ))
 
-            yield encoder.encode(TextMessageStartEvent(
-                type=EventType.TEXT_MESSAGE_START,
-                message_id=message_id,
-                role="assistant",
-            ))
-
-            for i in range(0, len(result), 160):
-                yield encoder.encode(TextMessageContentEvent(
-                    #Missing event information
-                ))
-            yield encoder.encode(TextMessageEndEvent(
-                type=EventType.TEXT_MESSAGE_END,
-                message_id=message_id,
-            ))
-
             #missing finished event
 
         except Exception as exc:
@@ -284,7 +293,11 @@ async def agent_endpoint(input_data: RunAgentInput, request: Request) -> Streami
                 code="STUDY_PLANNER_ERROR",
             ))
 
-    return StreamingResponse(events(), media_type=encoder.get_content_type())
+    return StreamingResponse(
+        events(),
+        media_type=encoder.get_content_type(),
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/demo-events")
