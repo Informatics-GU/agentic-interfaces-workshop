@@ -2,6 +2,8 @@
 
 Workshop materials on agentic interfaces for AI-driven user experiences
 
+[Retrieve API Key here](https://gonzagau.sharepoint.com/sites/InformaticsAppliedTechnology/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FInformaticsAppliedTechnology%2FShared%20Documents%2FChris%2FWorkshop%20API%20Key%2Etxt&parent=%2Fsites%2FInformaticsAppliedTechnology%2FShared%20Documents%2FChris&p=true&ga=1)
+
 ## Workshop structure
 
 Hosted through the ACM using the HACLab
@@ -41,7 +43,7 @@ An initial version of the app will be available for them to clone. The workshop 
 
 
 ### Sept 22 - 28
-- [x] Sept 28: Confirm dates and location
+- Sept 28: Confirm dates and location
 
 ### Sept 29 - Oct 5
 - Oct 5th: Outline for both presentations complete
