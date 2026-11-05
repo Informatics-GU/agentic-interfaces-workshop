@@ -72,12 +72,8 @@ export function App() {
         break;
       case 'TEXT_MESSAGE_CONTENT':
         setChat((messages) => {
+                    // missing code challenge #3 
           
-
-          updated[last] = {
-            ...updated[last],
-            content: updated[last].content + String(event.delta ?? ''),
-          };
 
           return updated;
         });
