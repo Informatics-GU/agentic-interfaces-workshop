@@ -2,7 +2,11 @@
   "name": "agui-study-planner",
   "private": true,
   "scripts": {
-    "dev": "node scripts/dev.mjs",
+    "setup": "npm install && npm install --prefix frontend && python3 -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements.txt",
+    "dev": "concurrently -k -n api,web -c blue,green \"cd backend && .venv/bin/uvicorn main:app --reload --port 8000\" \"npm run dev --prefix frontend\"",
     "start": "npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
   }
 }
