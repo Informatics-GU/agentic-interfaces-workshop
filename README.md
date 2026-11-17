@@ -131,7 +131,20 @@ The “Demonstrate classic 16” button performs two deterministic demo runs: on
 
 ## Run it
 
-### 1. Backend
+After completing the one-time setup below, build the frontend and start the app
+from the project root:
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:1537`. The backend serves the frontend and API on port 1537.
+Press Ctrl+C to stop the server. The launcher
+uses `backend/.venv` or the root `.venv` if available; otherwise it uses the
+system Python. Install the backend requirements in whichever Python environment
+you use.
+
+### One-time setup: backend
 
 Python 3.11+ is recommended.
 
@@ -140,7 +153,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\\Scripts\\activate
 pip install -r requirements.txt
-cp .env.example .env
+# Create .env with your API settings (see below)
 ```
 
 Edit `backend/.env`:
@@ -148,7 +161,7 @@ Edit `backend/.env`:
 ```env
 OPENAPI_KEY=your_real_key_here
 OPENAI_MODEL=gpt-4o-mini
-FRONTEND_ORIGIN=http://localhost:5173
+FRONTEND_ORIGIN=http://localhost:1537
 ```
 
 Azure OpenAI is also supported. If you want to use the Azure endpoint you shared, set:
@@ -158,26 +171,19 @@ AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
 AZURE_OPENAI_API_KEY=your_azure_openai_key_here
 OPENAI_API_VERSION=2024-10-21
 AZURE_OPENAI_DEPLOYMENT=your-deployment-name
-FRONTEND_ORIGIN=http://localhost:5173
+FRONTEND_ORIGIN=http://localhost:1537
 ```
 
-Then start FastAPI:
+Backend health check after startup: `http://localhost:1537/health`
 
-```bash
-uvicorn main:app --reload --port 8000
-```
-
-Health check: `http://localhost:8000/health`
-
-### 2. Frontend
+### One-time setup: frontend
 
 ```bash
 cd frontend
 npm install
-npm run dev
 ```
 
-Open `http://localhost:5173`.
+Return to the project root and run `npm run dev`.
 
 ## How A2UI is used
 

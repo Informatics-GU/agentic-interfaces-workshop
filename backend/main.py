@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from openai import AzureOpenAI, OpenAI
 
 from ag_ui.core import (
@@ -89,7 +90,7 @@ SAMPLE_SCHEDULE = {
 app = FastAPI(title="AG-UI + A2UI Study Planner", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")],
+    allow_origins=[os.getenv("FRONTEND_ORIGIN", "http://localhost:1537")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -837,3 +838,7 @@ async def demo_events(input_data: RunAgentInput, request: Request, terminal: str
             yield encoder.encode(RunFinishedEvent(type=EventType.RUN_FINISHED, thread_id=input_data.thread_id, run_id=input_data.run_id))
 
     return StreamingResponse(events(), media_type=encoder.get_content_type())
+
+frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+if frontend_dist.is_dir():
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")

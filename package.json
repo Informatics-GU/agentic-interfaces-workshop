@@ -1,0 +1,7 @@
+{
+  "name": "agui-a2ui-study-planner",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix frontend run build && node scripts/dev.mjs"
+  }
+}

@@ -1,6 +1,6 @@
 import type { AgEvent } from './types';
 
-const API = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+const API = import.meta.env.VITE_API_BASE_URL ?? '';
 export type StreamOptions = {
   threadId?: string;
   state?: Record<string, unknown>;
