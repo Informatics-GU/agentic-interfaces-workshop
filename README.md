@@ -131,15 +131,15 @@ The “Demonstrate classic 16” button performs two deterministic demo runs: on
 
 ## Run it
 
-After completing the one-time setup below, build the frontend and start the app
-from the project root:
+After completing the one-time setup below, run this from the project root or the
+`frontend` directory:
 
 ```bash
 npm run dev
 ```
 
-Open `http://localhost:1537`. The backend serves the frontend and API on port 1537.
-Press Ctrl+C to stop the server. The launcher
+Open `http://localhost:5173`. Vite proxies API requests to the available port
+assigned to the backend at startup. Press Ctrl+C to stop both servers. The launcher
 uses `backend/.venv` or the root `.venv` if available; otherwise it uses the
 system Python. Install the backend requirements in whichever Python environment
 you use.
@@ -161,7 +161,7 @@ Edit `backend/.env`:
 ```env
 OPENAPI_KEY=your_real_key_here
 OPENAI_MODEL=gpt-4o-mini
-FRONTEND_ORIGIN=http://localhost:1537
+FRONTEND_ORIGIN=http://localhost:5173
 ```
 
 Azure OpenAI is also supported. If you want to use the Azure endpoint you shared, set:
@@ -171,10 +171,10 @@ AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
 AZURE_OPENAI_API_KEY=your_azure_openai_key_here
 OPENAI_API_VERSION=2024-10-21
 AZURE_OPENAI_DEPLOYMENT=your-deployment-name
-FRONTEND_ORIGIN=http://localhost:1537
+FRONTEND_ORIGIN=http://localhost:5173
 ```
 
-Backend health check after startup: `http://localhost:1537/health`
+Backend health check through Vite: `http://localhost:5173/health`
 
 ### One-time setup: frontend
 

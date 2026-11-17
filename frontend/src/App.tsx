@@ -12,12 +12,14 @@ const CLASSIC_16 = [
 
 const STEPS = [
   { surfaceId: 'intake', label: 'Your week' },
+  { surfaceId: 'followup', label: 'Questions' },
   { surfaceId: 'preferences', label: 'Study times' },
   { surfaceId: 'week-schedule', label: 'Your plan' },
 ];
 
 const SURFACE_TITLES: Record<string, string> = {
   intake: 'Your week',
+  followup: 'A few questions',
   preferences: 'Study preferences',
   'week-schedule': 'Your week plan',
 };
@@ -26,6 +28,8 @@ const SURFACE_TITLES: Record<string, string> = {
 const ACTION_CHAT: Record<string, string> = {
   submit_schedule: 'Here is my week and my assignments.',
   back_to_schedule: 'I want to edit my schedule.',
+  submit_followups: 'Here are my answers.',
+  skip_followups: 'I will skip the questions.',
   submit_preferences: 'These are my study preferences.',
   back_to_preferences: 'I want to change my study times.',
 };
@@ -162,7 +166,7 @@ export function App() {
       </header>
 
       <ol className="stepper" aria-label="Progress">
-        {STEPS.map((step) => (
+        {STEPS.filter((step) => step.surfaceId !== 'followup' || surfaces.followup).map((step) => (
           <li key={step.surfaceId} className={surfaces[step.surfaceId] ? 'active' : ''}>
             {step.label}
           </li>

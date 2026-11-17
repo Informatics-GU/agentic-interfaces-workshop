@@ -1,10 +1,16 @@
 import { defineConfig } from 'vite';
 
+const backendUrl = process.env.STUDY_PLANNER_BACKEND_URL;
+
 export default defineConfig({
   server: {
-    proxy: {
-      '/agent': 'http://localhost:1537',
-      '/demo-events': 'http://localhost:1537',
-    },
+    port: 5173,
+    strictPort: true,
+    proxy: backendUrl ? {
+      '/agent': backendUrl,
+      '/demo-events': backendUrl,
+      '/health': backendUrl,
+      '/catalog': backendUrl,
+    } : undefined,
   },
 });

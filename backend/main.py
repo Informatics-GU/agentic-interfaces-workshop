@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 from openai import AzureOpenAI, OpenAI
 
 from ag_ui.core import (
@@ -45,7 +44,7 @@ CATALOG = json.loads(CATALOG_PATH.read_text())
 CATALOG_ID = CATALOG["catalogId"]
 
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-SURFACES = ("intake", "preferences", "week-schedule")
+SURFACES = ("intake", "followup", "preferences", "week-schedule")
 
 # The planner LLM only sees the schedule components; form components are built by the backend.
 SCHEDULE_COMPONENTS = {
@@ -67,30 +66,17 @@ PACING_OPTIONS = [
     ("late", "Closer to the deadline", "Leave more of the work for the final days"),
 ]
 
-SAMPLE_SCHEDULE = {
-    "availability": {
-        "monday": "Class 9:00-10:15 and 1:00-2:15; free after 3:00 PM",
-        "tuesday": "Class 10:30-11:45; work 4:00-8:00 PM",
-        "wednesday": "Class 9:00-10:15 and 1:00-2:15; free after 3:00 PM",
-        "thursday": "Class 10:30-11:45; work 4:00-8:00 PM",
-        "friday": "Class 9:00-10:15; free after 11:00 AM",
-        "saturday": "Mostly free after noon",
-        "sunday": "Free 1:00-6:00 PM",
-    },
-    "assignments": [
-        {"name": "Physics reading", "course": "Physics", "dueDay": "Tuesday", "dueTime": "09:00", "hours": 0.5},
-        {"name": "Physics homework", "course": "Physics", "dueDay": "Thursday", "dueTime": "23:59", "hours": 2},
-        {"name": "New Testament reading", "course": "Religion", "dueDay": "Friday", "dueTime": "09:00", "hours": 0.5},
-        {"name": "Algorithms problem set", "course": "CS", "dueDay": "Sunday", "dueTime": "23:59", "hours": 3},
-        {"name": "Mobile app feature", "course": "CS", "dueDay": "Monday", "dueTime": "08:00", "hours": 4},
-    ],
-    "limits": "I prefer not to study after 10 PM.",
-}
+DEFAULT_OPTIONS = [
+    {"id": "weekday-afternoons", "label": "Weekday afternoons", "description": "Right after class while the material is fresh.", "when": "Mon to Fri, 3:00 to 6:00 PM", "recommended": True},
+    {"id": "weekday-evenings", "label": "Weekday evenings", "description": "Quieter hours once the day's commitments are done.", "when": "Mon to Thu, 7:00 to 10:00 PM", "recommended": False},
+    {"id": "saturday-afternoon", "label": "Saturday afternoon", "description": "A long, uninterrupted stretch for bigger assignments.", "when": "Sat, 12:00 to 5:00 PM", "recommended": True},
+    {"id": "sunday-afternoon", "label": "Sunday afternoon", "description": "Wrap up anything due early in the week.", "when": "Sun, 1:00 to 6:00 PM", "recommended": False},
+]
 
 app = FastAPI(title="AG-UI + A2UI Study Planner", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("FRONTEND_ORIGIN", "http://localhost:1537")],
+    allow_origins=[os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -269,6 +255,156 @@ def build_intake(schedule: dict[str, Any] | None) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Step 1b: follow-up questions (the LLM decides whether any are needed)
+# ---------------------------------------------------------------------------
+
+MAX_FOLLOWUPS = 4
+
+
+def followups_prompt(schedule: dict[str, Any]) -> str:
+    return f"""
+You review a university student's week before a study plan is built. Look for gaps, conflicts or missing details
+that would change the plan, for example:
+- an assignment that needs more hours than the free time before its due date,
+- a day with no information that might hold a class or shift,
+- an unclear due time or an unclear assignment,
+- two fixed commitments that overlap.
+
+Ask only questions whose answers would change the plan. Do NOT ask when they like to study; a later step covers that.
+If the schedule is clear, return an empty list. Ask at most {MAX_FOLLOWUPS} questions.
+
+Return ONLY valid JSON with this exact shape:
+{{
+  "assistantMessage": "one sentence on why you are asking",
+  "questions": [
+    {{
+      "id": "kebab-case-id",
+      "question": "the question in plain words",
+      "why": "short reason this matters",
+      "type": "choice | yesno | text",
+      "options": ["only for type choice: 2 to 5 short answers"]
+    }}
+  ]
+}}
+
+Student input:
+{format_schedule(schedule)}
+""".strip()
+
+
+def clean_questions(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    questions: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in raw.get("questions") or []:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("question", "")).strip()
+        if not text:
+            continue
+
+        kind = str(item.get("type", "text")).lower()
+        if kind not in {"choice", "yesno", "text"}:
+            kind = "text"
+        options: list[str] = []
+        if kind == "yesno":
+            options = ["Yes", "No"]
+        elif kind == "choice":
+            options = [str(o).strip()[:60] for o in (item.get("options") or []) if str(o).strip()][:5]
+            if len(options) < 2:
+                kind, options = "text", []
+
+        qid = re.sub(r"[^a-z0-9-]+", "-", str(item.get("id") or text).lower()).strip("-")[:40] or f"q{len(questions) + 1}"
+        if qid in seen:
+            qid = f"{qid}-{len(questions) + 1}"
+        seen.add(qid)
+
+        questions.append({
+            "id": qid,
+            "question": text[:200],
+            "why": str(item.get("why", "")).strip()[:160],
+            "type": kind,
+            "options": options,
+        })
+    return questions[:MAX_FOLLOWUPS]
+
+
+def call_followups(schedule: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+    raw = llm_json(
+        "Return strict JSON only. You find gaps in a student's schedule that would change a study plan.",
+        followups_prompt(schedule),
+    )
+    message = str(raw.get("assistantMessage") or "A few details would help me plan your week.")
+    return message, clean_questions(raw)
+
+
+def build_followups(questions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    data = {"answers": {q["id"]: "" for q in questions}}
+    components: list[dict[str, Any]] = [
+        {
+            "id": "root",
+            "component": "Form",
+            "title": "A few quick questions",
+            "subtitle": "These gaps would change your plan. Answer what you can, or skip them.",
+            "children": [f"sec-{q['id']}" for q in questions] + ["actions"],
+        }
+    ]
+    for q in questions:
+        qid = q["id"]
+        path = f"/answers/{qid}"
+        components.append({
+            "id": f"sec-{qid}",
+            "component": "Section",
+            "title": q["question"],
+            "description": q["why"],
+            "children": [f"q-{qid}"],
+        })
+        if q["type"] == "text":
+            components.append(text_field(f"q-{qid}", "Your answer", path, multiline=True))
+        else:
+            components.append({
+                "id": f"q-{qid}",
+                "component": "ChoiceGroup",
+                "mode": "single",
+                "value": {"path": path},
+                "children": [f"q-{qid}-o{j}" for j in range(len(q["options"]))],
+            })
+            for j, option in enumerate(q["options"]):
+                components.append({
+                    "id": f"q-{qid}-o{j}",
+                    "component": "OptionCard",
+                    "optionId": option,
+                    "label": option,
+                })
+
+    components += [
+        {"id": "actions", "component": "ActionBar", "children": ["btn-back", "btn-skip", "btn-continue"]},
+        button("btn-back", "Edit my schedule", "back_to_schedule", variant="secondary"),
+        button("btn-skip", "Skip questions", "skip_followups", variant="secondary"),
+        button("btn-continue", "Continue", "submit_followups"),
+    ]
+    return show_surface("followup", components, data)
+
+
+def clean_followup_answers(data: Any, questions: list[dict[str, Any]]) -> list[dict[str, str]]:
+    raw = data.get("answers") if isinstance(data, dict) and isinstance(data.get("answers"), dict) else {}
+    answered: list[dict[str, str]] = []
+    for q in questions:
+        answer = str(raw.get(q["id"], "")).strip()
+        if not answer:
+            continue
+        if q["options"] and answer not in q["options"]:
+            continue
+        answered.append({"question": q["question"], "answer": answer[:300]})
+    return answered
+
+
+def format_followups(followups: list[dict[str, str]]) -> str:
+    if not followups:
+        return ""
+    return "\n".join(["Follow-up answers from the student:", *[f"- {f['question']} {f['answer']}" for f in followups]])
+
+
+# ---------------------------------------------------------------------------
 # Step 2: study-time preferences (windows are tailored by the LLM)
 # ---------------------------------------------------------------------------
 
@@ -343,7 +479,7 @@ def build_preferences(options: list[dict[str, Any]], prefs: dict[str, Any] | Non
     return show_surface("preferences", components, data)
 
 
-def options_prompt(schedule: dict[str, Any]) -> str:
+def options_prompt(schedule: dict[str, Any], followups: list[dict[str, str]]) -> str:
     return f"""
 You help a university student decide WHEN to study. Read their weekly commitments and propose 3 to 5 concrete study windows
 that are actually free for them. Respect their hard limits. Prefer windows that give each assignment enough room before its due date.
@@ -370,6 +506,7 @@ Rules:
 
 Student input:
 {format_schedule(schedule)}
+{format_followups(followups)}
 """.strip()
 
 
@@ -396,10 +533,10 @@ def clean_options(raw: dict[str, Any]) -> list[dict[str, Any]]:
     return options[:5]
 
 
-def call_options(schedule: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+def call_options(schedule: dict[str, Any], followups: list[dict[str, str]]) -> tuple[str, list[dict[str, Any]]]:
     raw = llm_json(
         "Return strict JSON only. You suggest realistic study windows for a student.",
-        options_prompt(schedule),
+        options_prompt(schedule, followups),
     )
     options = clean_options(raw)
     if not options:
@@ -501,6 +638,7 @@ You are a university study-planning agent that emits A2UI v0.9-style declarative
 The user gives you:
 - a rough week schedule / availability,
 - assignments, due dates and estimated completion times,
+- answers to any follow-up questions about gaps in their week,
 - their preferred study windows, session length and pacing.
 
 Build a realistic seven-day plan. Split long assignments when useful. Never schedule work after its due date.
@@ -575,8 +713,15 @@ def footer_components() -> list[dict[str, Any]]:
     ]
 
 
-def call_planner(schedule: dict[str, Any], prefs: dict[str, Any], options: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
-    student_input = f"{format_schedule(schedule)}\n\n{format_preferences(prefs, options)}"
+def call_planner(
+    schedule: dict[str, Any],
+    prefs: dict[str, Any],
+    options: list[dict[str, Any]],
+    followups: list[dict[str, str]],
+) -> tuple[str, list[dict[str, Any]]]:
+    student_input = "\n\n".join(
+        part for part in (format_schedule(schedule), format_followups(followups), format_preferences(prefs, options)) if part
+    )
     data = llm_json(
         "Return strict JSON only. You are generating a safe declarative A2UI surface from the supplied catalog.",
         planner_prompt(student_input),
@@ -590,13 +735,28 @@ def call_planner(schedule: dict[str, Any], prefs: dict[str, Any], options: list[
 # Agent logic: one function per A2UI action
 # ---------------------------------------------------------------------------
 
+async def preferences_result(schedule: dict[str, Any], followups: list[dict[str, str]]) -> dict[str, Any]:
+    message, options = await asyncio.to_thread(call_options, schedule, followups)
+    return {
+        "step": "suggest-study-windows",
+        "tool": {
+            "name": "suggest_study_windows",
+            "args": {"schedule": schedule, "followups": followups},
+            "result": {"status": "ok", "options": len(options)},
+        },
+        "message": message,
+        "state": {"phase": "preferences", "schedule": schedule, "followups": followups, "options": options},
+        "ops": build_preferences(options, None),
+    }
+
+
 async def plan_step(name: str, data: Any, state: dict[str, Any]) -> dict[str, Any]:
     if name in ("start", "restart"):
         return {
             "step": "show-intake-form",
             "message": "Tell me about your week and your assignments. Then I'll suggest when you could study.",
             "state": {"phase": "intake"},
-            "ops": build_intake(SAMPLE_SCHEDULE),   # was build_intake(None),
+            "ops": build_intake(None),
         }
 
     if name == "back_to_schedule":
@@ -611,18 +771,29 @@ async def plan_step(name: str, data: Any, state: dict[str, Any]) -> dict[str, An
         schedule = clean_schedule(data)
         if not schedule["assignments"]:
             raise ValueError("Add at least one assignment with a name before continuing.")
-        message, options = await asyncio.to_thread(call_options, schedule)
+        question_message, questions = await asyncio.to_thread(call_followups, schedule)
+        if not questions:
+            # Nothing worth asking: go straight to the study-window options.
+            return await preferences_result(schedule, [])
         return {
-            "step": "suggest-study-windows",
+            "step": "find-schedule-gaps",
             "tool": {
-                "name": "suggest_study_windows",
+                "name": "find_schedule_gaps",
                 "args": {"schedule": schedule},
-                "result": {"status": "ok", "options": len(options)},
+                "result": {"status": "ok", "questions": len(questions)},
             },
-            "message": message,
-            "state": {"phase": "preferences", "schedule": schedule, "options": options},
-            "ops": build_preferences(options, None),
+            "message": question_message,
+            "state": {"phase": "followup", "schedule": schedule, "questions": questions},
+            "ops": build_followups(questions),
         }
+
+    if name in ("submit_followups", "skip_followups"):
+        schedule = state.get("schedule")
+        questions = state.get("questions") or []
+        if not schedule:
+            raise ValueError("I lost your schedule. Please start over.")
+        followups = clean_followup_answers(data, questions) if name == "submit_followups" else []
+        return await preferences_result(schedule, followups)
 
     if name == "back_to_preferences":
         options = state.get("options") or DEFAULT_OPTIONS
@@ -641,7 +812,8 @@ async def plan_step(name: str, data: Any, state: dict[str, Any]) -> dict[str, An
         prefs = clean_prefs(data, options)
         if not prefs["windows"]:
             raise ValueError("Pick at least one study window.")
-        message, components = await asyncio.to_thread(call_planner, schedule, prefs, options)
+        followups = state.get("followups") or []
+        message, components = await asyncio.to_thread(call_planner, schedule, prefs, options, followups)
         return {
             "step": "build-week-plan",
             "tool": {
@@ -838,7 +1010,3 @@ async def demo_events(input_data: RunAgentInput, request: Request, terminal: str
             yield encoder.encode(RunFinishedEvent(type=EventType.RUN_FINISHED, thread_id=input_data.thread_id, run_id=input_data.run_id))
 
     return StreamingResponse(events(), media_type=encoder.get_content_type())
-
-frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"
-if frontend_dist.is_dir():
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
