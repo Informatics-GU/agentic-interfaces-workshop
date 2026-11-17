@@ -1,77 +1,89 @@
 {
-  "$id": "https://example.edu/a2ui/study-planner/v1/catalog.json",
-  "catalogId": "https://example.edu/a2ui/study-planner/v1/catalog.json",
+  "catalogId": "https://study-planner.local/catalogs/study-planner-v2.json",
+  "version": "v0.9",
+  "description": "Components for a three-step study planner: intake form, study-preference options, and a weekly schedule.",
   "components": {
-    "WeekSchedule": {
-      "type": "object",
-      "description": "Root component for a student's generated seven-day schedule.",
+    "Form": {
+      "description": "Top-level container for an input surface.",
+      "properties": { "title": "string", "subtitle": "string", "children": "string[] of component ids" }
+    },
+    "Section": {
+      "description": "Titled group of form fields.",
+      "properties": { "title": "string", "description": "string", "columns": "1 | 2", "children": "string[] of component ids" }
+    },
+    "TextField": {
+      "description": "Single-line or multi-line text input bound to the data model.",
       "properties": {
-        "title": { "type": "string" },
-        "subtitle": { "type": "string" },
-        "children": { "type": "array", "items": { "type": "string" } }
-      },
-      "required": ["title", "children"],
-      "additionalProperties": false
+        "label": "string",
+        "placeholder": "string",
+        "multiline": "boolean",
+        "inputType": "text | time",
+        "value": "{ path: string } data-model binding"
+      }
+    },
+    "AssignmentList": {
+      "description": "Repeating rows of assignments (name, course, dueDay, dueTime, hours). Users can add and remove rows.",
+      "properties": { "value": "{ path: string } binding to an array of assignments" }
+    },
+    "ChoiceGroup": {
+      "description": "A set of OptionCards. mode 'single' stores one optionId, 'multi' stores an array of optionIds.",
+      "properties": {
+        "label": "string",
+        "description": "string",
+        "mode": "single | multi",
+        "value": "{ path: string } data-model binding",
+        "children": "string[] of OptionCard ids"
+      }
+    },
+    "OptionCard": {
+      "description": "One selectable option inside a ChoiceGroup.",
+      "properties": { "optionId": "string", "label": "string", "description": "string", "meta": "string", "badge": "string" }
+    },
+    "Button": {
+      "description": "Sends a named action (with the surface data model) back to the agent. Disabled until every path in 'requires' has a value.",
+      "properties": {
+        "label": "string",
+        "variant": "primary | secondary",
+        "requires": "string[] of data-model paths",
+        "action": "{ event: { name: string } }"
+      }
+    },
+    "ActionBar": {
+      "description": "Row of Buttons.",
+      "properties": { "children": "string[] of Button ids" }
+    },
+    "WeekSchedule": {
+      "description": "Root of the finished plan.",
+      "properties": { "title": "string", "subtitle": "string", "children": "string[] of ScheduleSummary / WarningBanner / DayColumn ids" }
     },
     "DayColumn": {
-      "type": "object",
-      "description": "A single weekday/day column containing scheduled study blocks.",
-      "properties": {
-        "day": { "type": "string" },
-        "date": { "type": "string" },
-        "children": { "type": "array", "items": { "type": "string" } }
-      },
-      "required": ["day", "children"],
-      "additionalProperties": false
+      "description": "One day of the plan.",
+      "properties": { "day": "string", "date": "string", "children": "string[] of StudyBlock / DeadlineBadge ids" }
     },
     "StudyBlock": {
-      "type": "object",
-      "description": "One scheduled work session for an assignment.",
+      "description": "A scheduled study session.",
       "properties": {
-        "course": { "type": "string" },
-        "assignment": { "type": "string" },
-        "start": { "type": "string" },
-        "end": { "type": "string" },
-        "minutes": { "type": "integer", "minimum": 5 },
-        "due": { "type": "string" },
-        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"] },
-        "note": { "type": "string" }
-      },
-      "required": ["assignment", "start", "end", "minutes", "due", "priority"],
-      "additionalProperties": false
+        "assignment": "string",
+        "course": "string",
+        "start": "string, e.g. 3:00 PM",
+        "end": "string, e.g. 4:30 PM",
+        "minutes": "number",
+        "due": "string",
+        "priority": "low | medium | high | urgent",
+        "note": "string"
+      }
     },
     "DeadlineBadge": {
-      "type": "object",
-      "description": "Highlights a deadline that should remain visible in the weekly plan.",
-      "properties": {
-        "label": { "type": "string" },
-        "due": { "type": "string" },
-        "urgency": { "type": "string", "enum": ["normal", "soon", "urgent"] }
-      },
-      "required": ["label", "due", "urgency"],
-      "additionalProperties": false
+      "description": "Marks a due date inside a day.",
+      "properties": { "label": "string", "due": "string", "urgency": "normal | soon | urgent" }
     },
     "ScheduleSummary": {
-      "type": "object",
-      "description": "Short summary of the planning strategy and total scheduled workload.",
-      "properties": {
-        "text": { "type": "string" },
-        "totalMinutes": { "type": "integer", "minimum": 0 }
-      },
-      "required": ["text", "totalMinutes"],
-      "additionalProperties": false
+      "description": "Short summary of the plan.",
+      "properties": { "text": "string", "totalMinutes": "number" }
     },
     "WarningBanner": {
-      "type": "object",
-      "description": "Used only when workload cannot fit safely before due dates or information is missing.",
-      "properties": {
-        "message": { "type": "string" },
-        "severity": { "type": "string", "enum": ["info", "warning", "error"] }
-      },
-      "required": ["message", "severity"],
-      "additionalProperties": false
+      "description": "Shown only when the workload does not fit or input is incomplete.",
+      "properties": { "message": "string", "severity": "info | warning | error" }
     }
-  },
-  "functions": [],
-  "theme": {}
+  }
 }

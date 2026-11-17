@@ -68,3 +68,46 @@ h2 { margin: 0; font-size: 16px; }
   .event-panel { position: static; max-height: none; }
   .event-list { max-height: 500px; }
 }
+
+/* ---- A2UI forms, choices and stepper ---- */
+.topbar-actions { display: flex; gap: 10px; }
+.stepper { list-style: none; display: flex; gap: 8px; margin: 0 0 16px; padding: 0; flex-wrap: wrap; }
+.stepper li { padding: 6px 12px; border: 1px solid #242d3b; border-radius: 999px; color: #68768b; font-size: 12px; }
+.stepper li.active { color: #e8edf7; border-color: #637188; background: #202938; }
+.busy-bar, .error-bar { padding: 10px 14px; border-radius: 10px; font-size: 13px; }
+.busy-bar { background: #162219; border: 1px solid #253d2b; color: #b9d6c0; }
+.error-bar { background: #261416; border: 1px solid #5a2b30; color: #f0b9be; }
+.a2ui-child { display: contents; }
+.a2ui-form { padding: 18px; display: grid; gap: 16px; }
+.form-heading h3 { margin: 0 0 4px; font-size: 20px; }
+.form-heading p { margin: 0; color: #93a0b4; font-size: 13px; line-height: 1.5; }
+.form-section { border: 1px solid #253044; border-radius: 12px; padding: 14px; background: #0e141e; display: grid; gap: 12px; }
+.form-section header h4 { margin: 0; font-size: 14px; }
+.form-section header p { margin: 4px 0 0; color: #7e8aa0; font-size: 12px; line-height: 1.4; }
+.form-grid { display: grid; gap: 10px; }
+.form-grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.field { display: grid; gap: 5px; font-size: 12px; color: #aab5c5; }
+.field input, .field textarea, .field select { width: 100%; background: #0b0e14; border: 1px solid #2b3749; border-radius: 8px; color: #e8edf7; padding: 9px 10px; font: inherit; font-size: 13px; }
+.field input:focus, .field textarea:focus, .field select:focus { outline: 2px solid #637188; outline-offset: 0; }
+.field textarea { resize: vertical; line-height: 1.5; }
+.assignment-list { display: grid; gap: 12px; }
+.assignment-row { display: grid; grid-template-columns: 2fr 1.2fr 1.1fr 1fr .7fr auto; gap: 8px; align-items: end; }
+.choice-group { display: grid; gap: 8px; }
+.choice-label { color: #93a0b4; font-size: 12px; }
+.option-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.option-card { text-align: left; display: grid; gap: 4px; padding: 12px; border-radius: 10px; background: #151d29; color: #e8edf7; border: 1px solid #2b3749; font-weight: 400; }
+.option-card:hover:not(:disabled) { border-color: #4b596d; }
+.option-card.selected { border-color: #e8edf7; background: #1d2838; }
+.option-card:focus-visible, button:focus-visible { outline: 2px solid #e8edf7; outline-offset: 2px; }
+.option-title { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.option-title strong { font-size: 13px; }
+.option-card .badge { font-style: normal; font-size: 10px; color: #b9d6c0; border: 1px solid #253d2b; border-radius: 999px; padding: 2px 7px; }
+.option-meta { color: #cad4e2; font-size: 12px; }
+.option-card small { color: #91a0b5; font-size: 11px; line-height: 1.4; }
+.action-bar { display: flex; gap: 10px; flex-wrap: wrap; }
+.a2ui-form .action-bar { margin-top: 2px; }
+.week-schedule + .action-bar { padding: 0 16px 16px; }
+@media (max-width: 800px) {
+  .form-grid.cols-2 { grid-template-columns: 1fr; }
+  .assignment-row { grid-template-columns: 1fr 1fr; }
+}

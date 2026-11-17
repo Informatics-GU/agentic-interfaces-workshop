@@ -1,6 +1,12 @@
 import type { AgEvent } from './types';
 
 const API = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+export type StreamOptions = {
+  threadId?: string;
+  state?: Record<string, unknown>;
+  forwardedProps?: Record<string, unknown>;
+};
+
 export async function streamAgUi(
   path: string,
   messages: Array<{
@@ -9,15 +15,16 @@ export async function streamAgUi(
     content: string;
   }>,
   onEvent: (event: AgEvent) => void,
+  options: StreamOptions = {},
 ): Promise<void> {
   const body = {
-    threadId: crypto.randomUUID(),
+    threadId: options.threadId ?? crypto.randomUUID(),
     runId: crypto.randomUUID(),
-    state: {},
+    state: options.state ?? {},
     messages,
     tools: [],
     context: [],
-    forwardedProps: {},
+    forwardedProps: options.forwardedProps ?? {},
   };
 
   const response = await fetch(`${API}${path}`, {

@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { A2UIRenderer } from './a2ui';
+import { useEffect, useRef, useState } from 'react';
+import { A2UIRenderer, applyOperation, setPath } from './a2ui';
 import { streamAgUi } from './agui';
-import type { A2UIComponent, A2UIOperation, AgEvent, ChatMessage } from './types';
+import type { A2UIAction, A2UIOperation, A2UISurface, AgEvent, ChatMessage } from './types';
 
 const CLASSIC_16 = [
   'RUN_STARTED', 'RUN_FINISHED', 'RUN_ERROR', 'STEP_STARTED', 'STEP_FINISHED',
@@ -10,14 +10,36 @@ const CLASSIC_16 = [
   'STATE_SNAPSHOT', 'STATE_DELTA', 'MESSAGES_SNAPSHOT', 'CUSTOM',
 ];
 
-const EXAMPLE = `Rough week schedule:\nMonday: class 9:00-10:15 and 1:00-2:15; free after 3:00 PM.\nTuesday: class 10:30-11:45; work 4:00-8:00 PM.\nWednesday: same as Monday.\nThursday: same as Tuesday.\nFriday: class 9:00-10:15; free after 11:00 AM.\nSaturday: mostly free after noon.\nSunday: free 1:00-6:00 PM.\nI prefer not to study after 10 PM.\n\nAssignments:\nPhysics reading — due Tuesday 9:00 AM — 30 minutes\nPhysics homework — due Thursday 11:59 PM — 2 hours\nNew Testament reading — due Friday 9:00 AM — 30 minutes\nAlgorithms problem set — due Sunday 11:59 PM — 3 hours\nMobile app feature — due Monday 8:00 AM — 4 hours`;
+const STEPS = [
+  { surfaceId: 'intake', label: 'Your week' },
+  { surfaceId: 'preferences', label: 'Study times' },
+  { surfaceId: 'week-schedule', label: 'Your plan' },
+];
+
+const SURFACE_TITLES: Record<string, string> = {
+  intake: 'Your week',
+  preferences: 'Study preferences',
+  'week-schedule': 'Your week plan',
+};
+
+// What shows up in the chat when the student clicks a button.
+const ACTION_CHAT: Record<string, string> = {
+  submit_schedule: 'Here is my week and my assignments.',
+  back_to_schedule: 'I want to edit my schedule.',
+  submit_preferences: 'These are my study preferences.',
+  back_to_preferences: 'I want to change my study times.',
+};
 
 export function App() {
-  const [input, setInput] = useState(EXAMPLE);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [events, setEvents] = useState<AgEvent[]>([]);
-  const [components, setComponents] = useState<Record<string, A2UIComponent>>({});
+  const [surfaces, setSurfaces] = useState<Record<string, A2UISurface>>({});
   const [busy, setBusy] = useState(false);
+
+  // Agent state round-trips through AG-UI: the server emits STATE_SNAPSHOT, we send it back next run.
+  const agentState = useRef<Record<string, unknown>>({});
+  const threadId = useRef(crypto.randomUUID());
+  const started = useRef(false);
 
   const seen = new Set(events.map((event) => event.type));
 
@@ -28,6 +50,7 @@ export function App() {
       case 'TEXT_MESSAGE_START':
         setChat((prev) => [...prev, { role: 'assistant', content: '' }]);
         break;
+
       case 'TEXT_MESSAGE_CONTENT':
         setChat((prev) => {
           const copy = [...prev];
@@ -40,32 +63,44 @@ export function App() {
           return copy;
         });
         break;
+
+      case 'STATE_SNAPSHOT': {
+        // Only keep planner state (the demo endpoint's snapshot has no "phase").
+        const snapshot = event.snapshot as Record<string, unknown> | undefined;
+        if (snapshot && 'phase' in snapshot) agentState.current = snapshot;
+        break;
+      }
+
       case 'CUSTOM':
         if (event.name === 'a2ui') {
-          const updates = (event.value as A2UIOperation).updateComponents?.components;
-          if (updates) setComponents((prev) => ({
-            ...prev,
-            ...Object.fromEntries(updates.map((component) => [component.id, component])),
-          }));
+          setSurfaces((prev) => applyOperation(prev, event.value as A2UIOperation));
         }
         break;
     }
   }
 
-  async function runStream(
-    path: string,
-    message = input,
-    resetComponents = false,
-    resetEvents = true,
-  ) {
+  async function runAction(name: string, data: Record<string, unknown> = {}, userText?: string) {
+    if (busy) return;
     setBusy(true);
-    if (resetEvents) setEvents([]);
-    if (resetComponents) {
-      setComponents({});
-      setChat([{ role: 'user', content: message }]);
+    setEvents([]);
+
+    if (name === 'start' || name === 'restart') {
+      agentState.current = {};
+      setChat([]);
     }
+    if (userText) setChat((prev) => [...prev, { role: 'user', content: userText }]);
+
     try {
-      await streamAgUi(path, [{ id: crypto.randomUUID(), role: 'user', content: message }], consume);
+      await streamAgUi(
+        '/agent',
+        [{ id: crypto.randomUUID(), role: 'user', content: userText ?? 'Start the study planner.' }],
+        consume,
+        {
+          threadId: threadId.current,
+          state: agentState.current,
+          forwardedProps: { a2uiAction: { name, data } },
+        },
+      );
     } catch (error) {
       consume({ type: 'CLIENT_ERROR', message: String(error) });
     } finally {
@@ -73,43 +108,92 @@ export function App() {
     }
   }
 
-  async function buildSchedule() {
-    if (!input.trim() || busy) return;
-    await runStream('/agent', input, true);
+  // Show the intake form as soon as the app loads.
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    void runAction('start');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleAction(action: A2UIAction) {
+    void runAction(action.name, action.data, ACTION_CHAT[action.name]);
+  }
+
+  function handleData(surfaceId: string, path: string, value: unknown) {
+    setSurfaces((prev) => {
+      const surface = prev[surfaceId];
+      if (!surface) return prev;
+      return { ...prev, [surfaceId]: { ...surface, data: setPath(surface.data, path, value) as Record<string, unknown> } };
+    });
   }
 
   async function demoEvents() {
     if (busy) return;
-    const message = 'Demonstrate the classic event catalogue.';
-    await runStream('/demo-events?terminal=finished', message);
-    await runStream('/demo-events?terminal=error', message, false, false);
+    setBusy(true);
+    setEvents([]);
+    try {
+      const message = 'Demonstrate the classic event catalogue.';
+      const messages = [{ id: crypto.randomUUID(), role: 'user' as const, content: message }];
+      await streamAgUi('/demo-events?terminal=finished', messages, consume);
+      await streamAgUi('/demo-events?terminal=error', messages, consume);
+    } catch (error) {
+      consume({ type: 'CLIENT_ERROR', message: String(error) });
+    } finally {
+      setBusy(false);
+    }
   }
+
+  const errors = events.filter((e) => e.type === 'RUN_ERROR' || e.type === 'CLIENT_ERROR');
+  const lastError = errors.length ? String(errors[errors.length - 1].message ?? 'Something went wrong.') : null;
+  const surfaceList = Object.values(surfaces);
 
   return (
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">AG-UI 1.0 transport · A2UI declarative schedule</p>
+          <p className="eyebrow">AG-UI 1.0 transport · A2UI declarative form and schedule</p>
           <h1>Study Planner Agent</h1>
         </div>
-        <button className="secondary" onClick={demoEvents} disabled={busy}>Demonstrate classic 16</button>
+        <div className="topbar-actions">
+          <button className="secondary" onClick={() => void runAction('restart')} disabled={busy}>Start over</button>
+          <button className="secondary" onClick={demoEvents} disabled={busy}>Demonstrate classic 16</button>
+        </div>
       </header>
+
+      <ol className="stepper" aria-label="Progress">
+        {STEPS.map((step) => (
+          <li key={step.surfaceId} className={surfaces[step.surfaceId] ? 'active' : ''}>
+            {step.label}
+          </li>
+        ))}
+      </ol>
 
       <section className="workspace">
         <div className="left-stack">
-          <section className="panel composer">
-            <div className="panel-title">
-              <h2>Student input</h2>
-              <span>rough schedule + assignments + due dates + estimates</span>
-            </div>
-            <textarea value={input} onChange={(e) => setInput(e.target.value)} />
-            <button onClick={buildSchedule} disabled={busy}>{busy ? 'Streaming…' : 'Build week schedule'}</button>
-          </section>
+          {busy ? <div className="busy-bar" role="status">The agent is working…</div> : null}
+          {lastError && !busy ? <div className="error-bar" role="alert">{lastError}</div> : null}
+
+          {surfaceList.map((surface) => (
+            <section className="panel surface-panel" key={surface.surfaceId}>
+              <div className="panel-title">
+                <h2>{SURFACE_TITLES[surface.surfaceId] ?? surface.surfaceId}</h2>
+                <span>A2UI surface: {surface.surfaceId}</span>
+              </div>
+              <A2UIRenderer surface={surface} onData={handleData} onAction={handleAction} disabled={busy} />
+            </section>
+          ))}
+
+          {surfaceList.length === 0 ? (
+            <section className="panel">
+              <div className="empty-state">{busy ? 'Getting your form ready…' : 'No surface yet. Press Start over.'}</div>
+            </section>
+          ) : null}
 
           <section className="panel chat-panel">
             <div className="panel-title"><h2>Chat</h2><span>TEXT_MESSAGE_* renders here</span></div>
             <div className="chat-log">
-              {chat.length === 0 ? <div className="empty-state">Send the example or replace it with your own week.</div> : null}
+              {chat.length === 0 ? <div className="empty-state">The agent's messages will appear here.</div> : null}
               {chat.map((message, i) => (
                 <div className={`bubble ${message.role}`} key={i}>
                   <small>{message.role}</small>
@@ -117,11 +201,6 @@ export function App() {
                 </div>
               ))}
             </div>
-          </section>
-
-          <section className="panel schedule-panel">
-            <div className="panel-title"><h2>A2UI surface</h2><span>custom catalog renderer</span></div>
-            <A2UIRenderer components={components} />
           </section>
         </div>
 
