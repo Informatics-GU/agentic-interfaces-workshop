@@ -2,7 +2,7 @@
 
 Workshop materials on agentic interfaces for AI-driven user experiences
 
-[Retrieve API Key here](https://gonzagau.sharepoint.com/sites/InformaticsAppliedTechnology/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FInformaticsAppliedTechnology%2FShared%20Documents%2FChris%2FWorkshop%20API%20Key%2Etxt&parent=%2Fsites%2FInformaticsAppliedTechnology%2FShared%20Documents%2FChris&p=true&ga=1)
+[Access sandboxes here](https://gonzagau-my.sharepoint.com/:x:/g/personal/lopes_gonzaga_edu/IQDw8d0sxBXnQ5CtkZxk44mLAcCFl1_6uO7_HAlKe7yo5K8?e=oALFGe&xsdata=MDV8MDJ8bG9wZXNAZ29uemFnYS5lZHV8N2IxZWNjYmY5NTBmNDNmNzhiYTkwOGRmNDY4MmU0YTJ8MmJhMzM0MDc1Y2NjNDk0MGJkMTZhZTE1NGYwNGMzY2F8MHwwfDYzOTMwNzIwMDEzOTg1NzkyMXxVbmtub3dufFRXRnBiR1pzYjNkOGV5SkZiWEIwZVUxaGNHa2lPblJ5ZFdVc0lsWWlPaUl3TGpBdU1EQXdNQ0lzSWxBaU9pSlhhVzR6TWlJc0lrRk9Jam9pVFdGcGJDSXNJbGRVSWpveWZRPT18MHx8fA%3d%3d&sdata=WU9DSlBJcEQwRzJadVEwOGxzUXVOMURpN3NMODZodFVUa1FlMUNKMUU2cz0%3d)
 
 ## Workshop structure
 
